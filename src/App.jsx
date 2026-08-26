@@ -304,6 +304,9 @@ export default function App() {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onAddImage={handleAddImage}
+        onSelectImage={handleAddImage}
+        onCancel={() => setIsAddModalOpen(false)}
+        pageCount={pages.length}
       />
     </div>
   );
