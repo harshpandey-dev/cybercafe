@@ -43,7 +43,7 @@ export function formatDateTime(dateStr, timeStr) {
  * Format 12-digit Aadhaar number as XXXX-XXXX-XXXX
  */
 export function formatAadhaarNumber(value) {
-  const digits = value.replace(/\D/g, '').slice(0, 12);
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 12);
   const parts = [];
   for (let i = 0; i < digits.length; i += 4) {
     parts.push(digits.slice(i, i + 4));
@@ -107,9 +107,29 @@ ${name}`;
 
 /**
  * Generate Encoded Mailto URI for mobile mail app trigger
+ * Format: mailto:help@uidai.gov.in?subject=...&body=...
  */
-export function generateMailtoLink(recipient, subject, body) {
+export function generateMailtoLink(param1, param2, param3) {
+  let recipient = 'help@uidai.gov.in';
+  let subject = '';
+  let body = '';
+
+  // Smart parameter auto-detection to ensure mailto: recipient is NEVER blank
+  if (typeof param1 === 'string' && param1.includes('@')) {
+    recipient = param1;
+    subject = param2 || '';
+    body = param3 || '';
+  } else if (typeof param3 === 'string' && param3.includes('@')) {
+    recipient = param3;
+    subject = param1 || '';
+    body = param2 || '';
+  } else {
+    subject = param1 || '';
+    body = param2 || '';
+  }
+
   const encodedSubject = encodeURIComponent(subject);
   const encodedBody = encodeURIComponent(body);
+
   return `mailto:${encodeURIComponent(recipient)}?subject=${encodedSubject}&body=${encodedBody}`;
 }

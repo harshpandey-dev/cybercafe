@@ -132,7 +132,7 @@ export default function CustomerCaseView({ caseId }) {
   const handleOpenEmailApp = () => {
     if (!caseData) return;
     const recipient = caseData.emailTo || 'help@uidai.gov.in';
-    const mailtoUrl = generateMailtoLink(caseData.emailSubject, caseData.emailBody, recipient);
+    const mailtoUrl = generateMailtoLink(recipient, caseData.emailSubject, caseData.emailBody);
     window.location.href = mailtoUrl;
   };
 
