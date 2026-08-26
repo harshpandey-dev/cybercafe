@@ -1,7 +1,9 @@
 import React from 'react';
 import { Camera, FilePlus, ShieldCheck, Zap, Sparkles } from 'lucide-react';
 
-export default function HomeScreen({ onStart }) {
+export default function HomeScreen({ onStart, onStartNewDocument }) {
+  const handleStart = onStart || onStartNewDocument;
+
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 max-w-lg mx-auto w-full text-center space-y-8 py-8">
       {/* Visual icon badge */}
@@ -29,7 +31,7 @@ export default function HomeScreen({ onStart }) {
       {/* Single Large Primary Button */}
       <div className="w-full max-w-sm pt-2">
         <button
-          onClick={onStart}
+          onClick={handleStart}
           className="btn-primary-xl group py-5 text-xl tracking-wide shadow-blue-600/30 hover:shadow-blue-600/50"
         >
           <Camera className="w-7 h-7 text-white transition-transform group-hover:scale-110" />
