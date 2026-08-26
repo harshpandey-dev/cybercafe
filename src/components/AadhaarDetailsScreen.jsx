@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { User, CreditCard, Calendar, Clock, Hash, ArrowRight, AlertCircle } from 'lucide-react';
+import { User, CreditCard, Calendar, Clock, Hash, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
 import { formatAadhaarNumber } from '../utils/uidaiEmail';
 
-export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails }) {
+export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, onNext, onBack }) {
   const [formData, setFormData] = useState(
     initialDetails || {
       name: '',
@@ -48,7 +48,10 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails }
       return;
     }
 
-    onSubmitDetails(formData);
+    const handleProceed = onSubmitDetails || onNext;
+    if (handleProceed) {
+      handleProceed(formData);
+    }
   };
 
   return (
@@ -195,8 +198,8 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails }
           </div>
         </div>
 
-        {/* Bottom Submit Button */}
-        <div className="pt-4">
+        {/* Bottom Action Buttons */}
+        <div className="pt-4 space-y-3">
           <button
             type="submit"
             className="btn-primary-xl py-5 text-xl shadow-blue-600/30 active:scale-95"
@@ -204,6 +207,17 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails }
             <span>Generate Email →</span>
             <ArrowRight className="w-6 h-6 text-white" />
           </button>
+
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="btn-secondary-xl py-4 border-slate-700 text-slate-300 hover:bg-slate-800"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-400" />
+              <span>← Back to PDF Ready</span>
+            </button>
+          )}
         </div>
       </form>
     </div>
