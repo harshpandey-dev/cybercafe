@@ -202,37 +202,73 @@ export default function App() {
   };
 
   const handleStartOver = () => {
-    if (window.confirm('Are you sure you want to start over? All current pages will be cleared.')) {
-      setPages([]);
-      setActivePageIndex(null);
-      setGeneratedPdf(null);
-      setAadhaarDetails(null);
-      setCreatedCaseData(null);
-      setCurrentStep('HOME');
-      if (window.location.pathname.startsWith('/case/')) {
-        window.history.pushState({}, '', '/');
-      }
+    setPages([]);
+    setActivePageIndex(null);
+    setGeneratedPdf(null);
+    setAadhaarDetails(null);
+    setCreatedCaseData(null);
+    setCurrentStep('HOME');
+    if (window.location.pathname.startsWith('/case/')) {
+      window.history.pushState({}, '', '/');
     }
   };
 
-  // Clean caseId extraction from URL for customer view
+  const handleHeaderBack = () => {
+    switch (currentStep) {
+      case 'CROP':
+        if (pages.length > 0) {
+          setCurrentStep('PAGE_LIST');
+        } else {
+          setCurrentStep('HOME');
+        }
+        break;
+      case 'PAGE_LIST':
+        setCurrentStep('HOME');
+        break;
+      case 'PDF_READY':
+        setCurrentStep('PAGE_LIST');
+        break;
+      case 'AADHAAR_DETAILS':
+        setCurrentStep('PDF_READY');
+        break;
+      case 'REVIEW_EMAIL':
+        setCurrentStep('AADHAAR_DETAILS');
+        break;
+      case 'QR_CODE':
+        setCurrentStep('REVIEW_EMAIL');
+        break;
+      default:
+        setCurrentStep('HOME');
+        break;
+    }
+  };
+
   const extractCleanCaseId = () => {
     const raw = window.location.pathname.replace(/^\/case\//, '');
     return raw.split('/')[0].split('?')[0].trim();
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased select-none">
       {currentStep !== 'CUSTOMER_VIEW' && (
         <>
-          <Header onStartOver={handleStartOver} currentStep={currentStep} />
+          <Header
+            currentStep={currentStep}
+            onBack={handleHeaderBack}
+            onReset={handleStartOver}
+            onStartOver={handleStartOver}
+            pageCount={pages.length}
+          />
           <ProgressBar currentStep={currentStep} />
         </>
       )}
 
       <main className="flex-1 flex flex-col w-full max-w-5xl mx-auto px-4 py-4 sm:py-6">
         {currentStep === 'HOME' && (
-          <HomeScreen onStartNewDocument={handleStartNewDocument} />
+          <HomeScreen
+            onStart={handleStartNewDocument}
+            onStartNewDocument={handleStartNewDocument}
+          />
         )}
 
         {currentStep === 'CROP' && activePageIndex !== null && pages[activePageIndex] && (
@@ -243,7 +279,7 @@ export default function App() {
             initialScanFilter={pages[activePageIndex].cropData?.applyScanFilter || false}
             onSaveCroppedPage={handleSaveCroppedPage}
             onRetake={() => setIsAddModalOpen(true)}
-            onCancel={() => setCurrentStep(pages.length > 1 ? 'PAGE_LIST' : 'HOME')}
+            onCancel={() => setCurrentStep(pages.length > 0 ? 'PAGE_LIST' : 'HOME')}
           />
         )}
 
@@ -251,9 +287,11 @@ export default function App() {
           <PageListScreen
             pages={pages}
             onAddPage={() => setIsAddModalOpen(true)}
-            onEditCrop={handleEditCropPage}
+            onAddAnotherPage={() => setIsAddModalOpen(true)}
+            onEditPage={handleEditCropPage}
             onDeletePage={handleDeletePage}
             onReorderPages={handleReorderPages}
+            onCreatePdf={handleGeneratePdf}
             onGeneratePdf={handleGeneratePdf}
             isGeneratingPdf={isGeneratingPdf}
           />
@@ -262,10 +300,22 @@ export default function App() {
         {currentStep === 'PDF_READY' && generatedPdf && (
           <PdfReadyScreen
             pdfResult={generatedPdf}
+            pdfInfo={generatedPdf}
             pages={pages}
+            onSavePdf={() => {
+              const blobUrl = URL.createObjectURL(generatedPdf.pdfBlob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = 'Aadhaar_Document_Merged.pdf';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+            }}
             onAddMorePages={() => setIsAddModalOpen(true)}
-            onContinueToAadhaar={() => setCurrentStep('AADHAAR_DETAILS')}
+            onCreateAnother={handleStartOver}
             onStartOver={handleStartOver}
+            onContinueToAadhaar={() => setCurrentStep('AADHAAR_DETAILS')}
           />
         )}
 
@@ -274,6 +324,7 @@ export default function App() {
             initialDetails={aadhaarDetails}
             onBack={() => setCurrentStep('PDF_READY')}
             onNext={handleSaveAadhaarDetails}
+            onSubmitDetails={handleSaveAadhaarDetails}
           />
         )}
 

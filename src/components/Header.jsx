@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { ArrowLeft, RotateCcw, AlertTriangle, FileText } from 'lucide-react';
 
-export default function Header({ currentStep, onBack, onReset, pageCount }) {
+export default function Header({ currentStep, onBack, onReset, onStartOver, pageCount = 0 }) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleBack = onBack;
+  const handleReset = onReset || onStartOver;
 
   return (
     <>
@@ -11,7 +14,7 @@ export default function Header({ currentStep, onBack, onReset, pageCount }) {
           {/* Back button */}
           {currentStep !== 'HOME' ? (
             <button
-              onClick={onBack}
+              onClick={handleBack}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 font-semibold text-sm transition-all"
               aria-label="Go Back"
             >
@@ -37,6 +40,9 @@ export default function Header({ currentStep, onBack, onReset, pageCount }) {
                 {currentStep === 'CROP' && 'Crop Page'}
                 {currentStep === 'PAGE_LIST' && `Manage (${pageCount} Pages)`}
                 {currentStep === 'PDF_READY' && 'PDF Complete'}
+                {currentStep === 'AADHAAR_DETAILS' && 'Aadhaar Details'}
+                {currentStep === 'REVIEW_EMAIL' && 'Review Email'}
+                {currentStep === 'QR_CODE' && 'Scan QR'}
               </h1>
             </div>
           )}
@@ -81,7 +87,7 @@ export default function Header({ currentStep, onBack, onReset, pageCount }) {
               <button
                 onClick={() => {
                   setShowResetConfirm(false);
-                  onReset();
+                  if (handleReset) handleReset();
                 }}
                 className="py-3 px-4 rounded-xl bg-red-600 hover:bg-red-700 font-semibold text-white text-sm active:scale-95 transition-all shadow-lg shadow-red-600/30"
               >
