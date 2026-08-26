@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: cybercafe-aadhaar-assistant
+    env: node
+    buildCommand: npm run build
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: UIDAI_RECIPIENT
+        value: help@uidai.gov.in
