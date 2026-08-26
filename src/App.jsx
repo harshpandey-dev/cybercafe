@@ -6,196 +6,142 @@ import AddDocumentModal from './components/AddDocumentModal';
 import CropScreen from './components/CropScreen';
 import PageListScreen from './components/PageListScreen';
 import PdfReadyScreen from './components/PdfReadyScreen';
-import PdfPreviewModal from './components/PdfPreviewModal';
 import AadhaarDetailsScreen from './components/AadhaarDetailsScreen';
 import ReviewEmailScreen from './components/ReviewEmailScreen';
 import QrCodeScreen from './components/QrCodeScreen';
 import CustomerCaseView from './components/CustomerCaseView';
+import { suggestDocumentCrop } from './utils/imageAutoCrop';
 import { createPdfFromImages } from './utils/pdfGenerator';
-import { Loader2 } from 'lucide-react';
 
 export default function App() {
-  // Check if current URL path is a scanned customer route e.g. /case/12345
-  const [pathname, setPathname] = useState(window.location.pathname);
+  const getInitialStep = () => {
+    const pathname = window.location.pathname;
+    if (pathname.startsWith('/case/')) {
+      return 'CUSTOMER_VIEW';
+    }
+    return 'HOME';
+  };
 
-  useEffect(() => {
-    const handlePopState = () => setPathname(window.location.pathname);
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
-  // Navigation step state: 'HOME' | 'ADD_PAGE' | 'CROP' | 'PAGE_LIST' | 'PDF_READY' | 'AADHAAR_DETAILS' | 'REVIEW_EMAIL' | 'QR_CODE'
-  const [currentStep, setCurrentStep] = useState('HOME');
-
-  // List of saved cropped document pages
+  const [currentStep, setCurrentStep] = useState(getInitialStep);
   const [pages, setPages] = useState([]);
-
-  // Active raw image currently being cropped/edited
-  const [currentRawImage, setCurrentRawImage] = useState(null);
-
-  // Index of page being edited
-  const [editingPageIndex, setEditingPageIndex] = useState(null);
-
-  // Generated PDF metadata: { pdfBlob, pdfBytes, pdfUrl, pdfBase64, sizeFormatted, pageCount }
+  const [activePageIndex, setActivePageIndex] = useState(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [generatedPdf, setGeneratedPdf] = useState(null);
-
-  // Form details for Aadhaar Update
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [aadhaarDetails, setAadhaarDetails] = useState(null);
-
-  // Created temporary case data: { caseId, expiresAt, localIp }
   const [createdCaseData, setCreatedCaseData] = useState(null);
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState('help@uidai.gov.in');
 
-  // PDF Preview modal state
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-
-  // Loading states
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-  const [isCreatingCase, setIsCreatingCase] = useState(false);
-
   useEffect(() => {
-    return () => {
-      if (generatedPdf?.pdfUrl) URL.revokeObjectURL(generatedPdf.pdfUrl);
-    };
-  }, [generatedPdf?.pdfUrl]);
-
-  useEffect(() => {
-    if (currentStep !== 'REVIEW_EMAIL') return;
-
-    let isActive = true;
-    fetch('/api/config')
-      .then((response) => {
-        if (!response.ok) throw new Error('Could not load email configuration.');
-        return response.json();
-      })
-      .then((data) => {
-        if (isActive) setEmailRecipient(data.emailRecipient || 'help@uidai.gov.in');
-      })
-      .catch(() => {
-        if (isActive) setEmailRecipient('help@uidai.gov.in');
-      });
-
-    return () => { isActive = false; };
-  }, [currentStep]);
-
-  // ROUTE 1: Customer Phone Scanned Page (/case/:caseId)
-  if (pathname.startsWith('/case/')) {
-    const caseId = pathname.split('/case/')[1];
-    return <CustomerCaseView caseId={caseId} />;
-  }
-
-  // ROUTE 2: Cyber Cafe Operator Wizard App
+    async function fetchConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const config = await res.json();
+          if (config.emailRecipient) {
+            setEmailRecipient(config.emailRecipient);
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load emailRecipient config, using default help@uidai.gov.in');
+      }
+    }
+    fetchConfig();
+  }, []);
 
   const handleStartNewDocument = () => {
     setPages([]);
-    setCurrentRawImage(null);
-    setEditingPageIndex(null);
+    setActivePageIndex(null);
     setGeneratedPdf(null);
     setAadhaarDetails(null);
     setCreatedCaseData(null);
-    setEmailRecipient('');
-    setCurrentStep('ADD_PAGE');
+    setIsAddModalOpen(true);
   };
 
-  const handleSelectImageForCrop = (imageSrc) => {
-    setCurrentRawImage(imageSrc);
+  const handleAddImage = async (imageSrc) => {
+    setIsAddModalOpen(false);
+    const suggestedCrop = await suggestDocumentCrop(imageSrc);
+
+    const newPage = {
+      id: `page_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      rawImageSrc: imageSrc,
+      croppedImage: null,
+      cropData: suggestedCrop
+        ? { cropPercent: { x: 5, y: 5, width: 90, height: 90 }, rotation: 0, applyScanFilter: false }
+        : { cropPercent: { x: 5, y: 5, width: 90, height: 90 }, rotation: 0, applyScanFilter: false },
+    };
+
+    setPages((prev) => [...prev, newPage]);
+    setActivePageIndex(pages.length);
     setCurrentStep('CROP');
   };
 
-  const handleSaveCroppedPage = (croppedPageData) => {
-    const newPageObj = {
-      id: editingPageIndex !== null ? pages[editingPageIndex].id : `page_${Date.now()}_${Math.random()}`,
-      croppedImage: croppedPageData.croppedImage,
-      rawImageSrc: croppedPageData.rawImageSrc,
-      cropData: croppedPageData.cropData,
-    };
+  const handleSaveCroppedPage = (croppedData) => {
+    setPages((prev) => {
+      const updated = [...prev];
+      if (activePageIndex !== null && updated[activePageIndex]) {
+        updated[activePageIndex] = {
+          ...updated[activePageIndex],
+          croppedImage: croppedData.croppedImage,
+          rawImageSrc: croppedData.rawImageSrc || updated[activePageIndex].rawImageSrc,
+          cropData: croppedData.cropData,
+        };
+      }
+      return updated;
+    });
 
-    if (editingPageIndex !== null) {
-      const updated = [...pages];
-      updated[editingPageIndex] = newPageObj;
-      setPages(updated);
-      setEditingPageIndex(null);
-    } else {
-      setPages((prev) => [...prev, newPageObj]);
-    }
-
-    setCurrentRawImage(null);
     setCurrentStep('PAGE_LIST');
   };
 
-  const handleEditPage = (index) => {
-    const pageToEdit = pages[index];
-    setEditingPageIndex(index);
-    setCurrentRawImage(pageToEdit.rawImageSrc || pageToEdit.croppedImage);
+  const handleEditCropPage = (index) => {
+    setActivePageIndex(index);
     setCurrentStep('CROP');
   };
 
-  const handleDeletePage = (indexToDelete) => {
-    const updated = pages.filter((_, idx) => idx !== indexToDelete);
+  const handleDeletePage = (index) => {
+    const updated = pages.filter((_, i) => i !== index);
     setPages(updated);
     if (updated.length === 0) {
-      setCurrentStep('ADD_PAGE');
+      setCurrentStep('HOME');
     }
   };
 
-  const handleCancelCrop = () => {
-    setCurrentRawImage(null);
-    setEditingPageIndex(null);
-    setCurrentStep(pages.length > 0 ? 'PAGE_LIST' : 'ADD_PAGE');
+  const handleReorderPages = (reorderedPages) => {
+    setPages(reorderedPages);
   };
 
-  const handleRetake = () => {
-    setCurrentRawImage(null);
-    setCurrentStep('ADD_PAGE');
-  };
-
-  const handleCreatePdf = async () => {
-    if (pages.length === 0) return;
+  const handleGeneratePdf = async () => {
+    const croppedImages = pages.map((p) => p.croppedImage || p.rawImageSrc);
+    if (croppedImages.length === 0) {
+      alert('Please add at least one cropped page to generate PDF.');
+      return;
+    }
 
     try {
       setIsGeneratingPdf(true);
-      const croppedImageUrls = pages.map((p) => p.croppedImage);
-      const result = await createPdfFromImages(croppedImageUrls);
+      const pdfResult = await createPdfFromImages(croppedImages);
       
-      const pdfUrl = URL.createObjectURL(result.pdfBlob);
-
-      // Convert Uint8Array to base64 for API case submission
-      let binaryStr = '';
-      const bytes = result.pdfBytes;
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binaryStr += String.fromCharCode(bytes[i]);
-      }
-      const pdfBase64 = btoa(binaryStr);
-
-      setGeneratedPdf({
-        ...result,
-        pdfUrl,
-        pdfBase64,
-        pdfFilename: `Aadhaar_DOB_LimitCross_Documents.pdf`,
-      });
-
-      setCurrentStep('PDF_READY');
+      let base64Pdf = '';
+      const reader = new FileReader();
+      reader.readAsDataURL(pdfResult.pdfBlob);
+      reader.onloadend = () => {
+        base64Pdf = reader.result;
+        setGeneratedPdf({
+          ...pdfResult,
+          pdfBase64: base64Pdf,
+        });
+        setCurrentStep('PDF_READY');
+        setIsGeneratingPdf(false);
+      };
     } catch (err) {
-      console.error('Failed to create PDF:', err);
-      alert('Error creating PDF file. Please check image pages and try again.');
-    } finally {
+      console.error('Error generating PDF:', err);
+      alert('Failed to generate PDF. Please try again.');
       setIsGeneratingPdf(false);
     }
   };
 
-  const handleSavePdf = () => {
-    if (!generatedPdf) return;
-
-    const downloadLink = document.createElement('a');
-    downloadLink.href = generatedPdf.pdfUrl;
-    downloadLink.download = generatedPdf.pdfFilename || `Document_Scan.pdf`;
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
-  };
-
-  const handleSubmitAadhaarDetails = (details) => {
+  const handleSaveAadhaarDetails = (details) => {
     setAadhaarDetails(details);
     setCurrentStep('REVIEW_EMAIL');
   };
@@ -221,7 +167,7 @@ export default function App() {
           emailSubject: subject,
           emailBody: body,
           pdfBase64: generatedPdf.pdfBase64,
-          pdfFilename: `Aadhaar_Documents_${aadhaarDetails.enrollmentNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          pdfFilename: `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
         }),
       });
 
@@ -232,6 +178,17 @@ export default function App() {
       const caseResult = await response.json();
       setCreatedCaseData({
         ...caseResult,
+        caseData: {
+          caseId: caseResult.caseId,
+          name: aadhaarDetails.name,
+          aadhaarMasked: `XXXX-XXXX-${aadhaarDetails.aadhaarNumber.slice(-4)}`,
+          emailTo: emailRecipient || 'help@uidai.gov.in',
+          emailSubject: subject,
+          emailBody: body,
+          pdfBase64: generatedPdf.pdfBase64,
+          pdfFilename: `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          expiresAt: caseResult.expiresAt,
+        },
         aadhaarMasked: `XXXX-XXXX-${aadhaarDetails.aadhaarNumber.slice(-4)}`,
       });
 
@@ -244,131 +201,86 @@ export default function App() {
     }
   };
 
-  const handleBack = () => {
-    switch (currentStep) {
-      case 'ADD_PAGE':
-        if (pages.length > 0) setCurrentStep('PAGE_LIST');
-        else setCurrentStep('HOME');
-        break;
-      case 'CROP':
-        if (editingPageIndex !== null) {
-          setEditingPageIndex(null);
-          setCurrentStep('PAGE_LIST');
-        } else if (pages.length > 0) {
-          setCurrentStep('PAGE_LIST');
-        } else {
-          setCurrentStep('ADD_PAGE');
-        }
-        break;
-      case 'PAGE_LIST':
-        setCurrentStep('ADD_PAGE');
-        break;
-      case 'PDF_READY':
-        setCurrentStep('PAGE_LIST');
-        break;
-      case 'AADHAAR_DETAILS':
-        setCurrentStep('PDF_READY');
-        break;
-      case 'REVIEW_EMAIL':
-        setCurrentStep('AADHAAR_DETAILS');
-        break;
-      case 'QR_CODE':
-        setCurrentStep('REVIEW_EMAIL');
-        break;
-      default:
-        setCurrentStep('HOME');
+  const handleStartOver = () => {
+    if (window.confirm('Are you sure you want to start over? All current pages will be cleared.')) {
+      setPages([]);
+      setActivePageIndex(null);
+      setGeneratedPdf(null);
+      setAadhaarDetails(null);
+      setCreatedCaseData(null);
+      setCurrentStep('HOME');
+      if (window.location.pathname.startsWith('/case/')) {
+        window.history.pushState({}, '', '/');
+      }
     }
   };
 
-  const handleReset = () => {
-    setPages([]);
-    setCurrentRawImage(null);
-    setEditingPageIndex(null);
-    setGeneratedPdf(null);
-    setAadhaarDetails(null);
-    setCreatedCaseData(null);
-    setEmailRecipient('');
-    setCurrentStep('HOME');
+  // Clean caseId extraction from URL for customer view
+  const extractCleanCaseId = () => {
+    const raw = window.location.pathname.replace(/^\/case\//, '');
+    return raw.split('/')[0].split('?')[0].trim();
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* Header Bar */}
-      <Header
-        currentStep={currentStep}
-        onBack={handleBack}
-        onReset={handleReset}
-        pageCount={pages.length}
-      />
+    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased">
+      {currentStep !== 'CUSTOMER_VIEW' && (
+        <>
+          <Header onStartOver={handleStartOver} currentStep={currentStep} />
+          <ProgressBar currentStep={currentStep} />
+        </>
+      )}
 
-      {/* Progress Bar */}
-      <ProgressBar currentStep={currentStep} />
-
-      {/* Main Screen Body */}
-      <main className="flex-1 flex flex-col relative overflow-x-hidden">
-        {/* Step 1: HOME */}
+      <main className="flex-1 flex flex-col w-full max-w-5xl mx-auto px-4 py-4 sm:py-6">
         {currentStep === 'HOME' && (
-          <HomeScreen onStart={handleStartNewDocument} />
+          <HomeScreen onStartNewDocument={handleStartNewDocument} />
         )}
 
-        {/* Step 2: ADD PAGE */}
-        {currentStep === 'ADD_PAGE' && (
-          <AddDocumentModal
-            onSelectImage={handleSelectImageForCrop}
-            onCancel={() => setCurrentStep('PAGE_LIST')}
-            pageCount={pages.length}
-          />
-        )}
-
-        {/* Step 3: CROP */}
-        {currentStep === 'CROP' && currentRawImage && (
+        {currentStep === 'CROP' && activePageIndex !== null && pages[activePageIndex] && (
           <CropScreen
-            imageSrc={currentRawImage}
+            imageSrc={pages[activePageIndex].rawImageSrc}
+            initialCrop={pages[activePageIndex].cropData?.cropPercent}
+            initialRotation={pages[activePageIndex].cropData?.rotation || 0}
+            initialScanFilter={pages[activePageIndex].cropData?.applyScanFilter || false}
             onSaveCroppedPage={handleSaveCroppedPage}
-            onRetake={handleRetake}
-            onCancel={handleCancelCrop}
-            initialCropData={
-              editingPageIndex !== null ? pages[editingPageIndex]?.cropData : null
-            }
+            onRetake={() => setIsAddModalOpen(true)}
+            onCancel={() => setCurrentStep(pages.length > 1 ? 'PAGE_LIST' : 'HOME')}
           />
         )}
 
-        {/* Step 4: PAGE LIST */}
         {currentStep === 'PAGE_LIST' && (
           <PageListScreen
             pages={pages}
-            onReorderPages={setPages}
-            onAddAnotherPage={() => setCurrentStep('ADD_PAGE')}
-            onEditPage={handleEditPage}
+            onAddPage={() => setIsAddModalOpen(true)}
+            onEditCrop={handleEditCropPage}
             onDeletePage={handleDeletePage}
-            onCreatePdf={handleCreatePdf}
+            onReorderPages={handleReorderPages}
+            onGeneratePdf={handleGeneratePdf}
+            isGeneratingPdf={isGeneratingPdf}
           />
         )}
 
-        {/* Step 5: PDF READY */}
-        {currentStep === 'PDF_READY' && (
+        {currentStep === 'PDF_READY' && generatedPdf && (
           <PdfReadyScreen
-            pdfInfo={generatedPdf}
-            onPreviewPdf={() => setShowPreviewModal(true)}
-            onSavePdf={handleSavePdf}
-            onCreateAnother={handleReset}
+            pdfResult={generatedPdf}
+            pages={pages}
+            onAddMorePages={() => setIsAddModalOpen(true)}
             onContinueToAadhaar={() => setCurrentStep('AADHAAR_DETAILS')}
+            onStartOver={handleStartOver}
           />
         )}
 
-        {/* V2A STEP 1: AADHAAR DETAILS FORM */}
         {currentStep === 'AADHAAR_DETAILS' && (
           <AadhaarDetailsScreen
             initialDetails={aadhaarDetails}
-            onSubmitDetails={handleSubmitAadhaarDetails}
+            onBack={() => setCurrentStep('PDF_READY')}
+            onNext={handleSaveAadhaarDetails}
           />
         )}
 
-        {/* V2A STEP 2: REVIEW EMAIL */}
-        {currentStep === 'REVIEW_EMAIL' && (
+        {currentStep === 'REVIEW_EMAIL' && aadhaarDetails && (
           <ReviewEmailScreen
             aadhaarDetails={aadhaarDetails}
-            pdfFilename={generatedPdf?.pdfFilename}
+            pdfFilename={generatedPdf?.pdfBlob ? `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf` : ''}
             emailRecipient={emailRecipient}
             onEditDetails={() => setCurrentStep('AADHAAR_DETAILS')}
             onCreateQr={handleCreateCustomerCase}
@@ -376,7 +288,6 @@ export default function App() {
           />
         )}
 
-        {/* V2A STEP 3: QR CODE SCREEN */}
         {currentStep === 'QR_CODE' && createdCaseData && (
           <QrCodeScreen
             caseData={createdCaseData}
@@ -384,28 +295,16 @@ export default function App() {
           />
         )}
 
-        {/* Loading Spinner overlay during PDF Generation */}
-        {isGeneratingPdf && (
-          <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex flex-col items-center justify-center p-4 text-center space-y-4">
-            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin shadow-2xl shadow-blue-500/50" />
-            <h3 className="font-heading text-2xl font-bold text-white">
-              Generating PDF...
-            </h3>
-            <p className="text-slate-400 text-sm max-w-xs">
-              Compressing images into a single high-quality document PDF.
-            </p>
-          </div>
+        {currentStep === 'CUSTOMER_VIEW' && (
+          <CustomerCaseView caseId={extractCleanCaseId()} />
         )}
       </main>
 
-      {/* PDF Inline Preview Modal */}
-      {showPreviewModal && generatedPdf && (
-        <PdfPreviewModal
-          pdfUrl={generatedPdf.pdfUrl}
-          onSavePdf={handleSavePdf}
-          onClose={() => setShowPreviewModal(false)}
-        />
-      )}
+      <AddDocumentModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddImage={handleAddImage}
+      />
     </div>
   );
 }
