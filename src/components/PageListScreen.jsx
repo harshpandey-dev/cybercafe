@@ -6,11 +6,17 @@ export default function PageListScreen({
   pages,
   onReorderPages,
   onAddAnotherPage,
+  onAddPage,
   onEditPage,
   onDeletePage,
   onCreatePdf,
+  onGeneratePdf,
+  isGeneratingPdf,
 }) {
   const [deletingIndex, setDeletingIndex] = useState(null);
+
+  const handleAdd = onAddAnotherPage || onAddPage;
+  const handlePdf = onCreatePdf || onGeneratePdf;
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -20,7 +26,6 @@ export default function PageListScreen({
     onReorderPages(items);
   };
 
-  // Fallback reorder up/down buttons for accessible mobile touch
   const movePage = (fromIdx, toIdx) => {
     if (toIdx < 0 || toIdx >= pages.length) return;
     const items = Array.from(pages);
@@ -44,7 +49,7 @@ export default function PageListScreen({
         
         {/* Add Another Page Header Button */}
         <button
-          onClick={onAddAnotherPage}
+          onClick={handleAdd}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600/20 border border-blue-500/40 text-blue-300 font-bold text-xs hover:bg-blue-600/30 active:scale-95 transition-all"
         >
           <PlusCircle className="w-4 h-4 text-blue-400" />
@@ -85,7 +90,7 @@ export default function PageListScreen({
                       {/* Thumbnail Preview */}
                       <div className="relative w-16 h-20 bg-slate-900 border border-slate-700 rounded-xl overflow-hidden flex-shrink-0 shadow-inner group">
                         <img
-                          src={page.croppedImage}
+                          src={page.croppedImage || page.rawImageSrc}
                           alt={`Page ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -156,7 +161,7 @@ export default function PageListScreen({
       <div className="space-y-3 pt-2">
         {/* Add Another Page Button */}
         <button
-          onClick={onAddAnotherPage}
+          onClick={handleAdd}
           className="btn-secondary-xl py-4 border-dashed border-2 border-slate-600 hover:border-slate-500 bg-slate-800/60 text-slate-200"
         >
           <PlusCircle className="w-6 h-6 text-blue-400" />
@@ -165,11 +170,12 @@ export default function PageListScreen({
 
         {/* Create PDF Primary Button */}
         <button
-          onClick={onCreatePdf}
-          className="btn-primary-xl py-5 text-xl shadow-blue-600/30 active:scale-95"
+          onClick={handlePdf}
+          disabled={isGeneratingPdf}
+          className="btn-primary-xl py-5 text-xl shadow-blue-600/30 active:scale-95 disabled:opacity-50"
         >
           <FileCheck className="w-7 h-7 text-white" />
-          <span>📄 Create PDF ({pages.length} Pages)</span>
+          <span>{isGeneratingPdf ? 'Creating PDF...' : `📄 Create PDF (${pages.length} Pages)`}</span>
         </button>
       </div>
 
