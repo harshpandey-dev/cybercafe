@@ -6,12 +6,12 @@ import { decodeCasePayload } from '../utils/caseEncoder';
 export default function CustomerCaseView({ caseId }) {
   const [caseData, setCaseData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isExpired, setIsExpired] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
 
   useEffect(() => {
     async function fetchCase() {
-      // Check query parameter fallback ?d=
       const searchParams = new URLSearchParams(window.location.search);
       const encodedData = searchParams.get('d');
 
@@ -25,7 +25,6 @@ export default function CustomerCaseView({ caseId }) {
           return;
         }
 
-        // Fallback: If Vercel cold start cleared memory, try decoding fallback ?d= parameter
         if (encodedData) {
           const fallbackData = decodeCasePayload(encodedData);
           if (fallbackData && Date.now() < fallbackData.expiresAt) {
@@ -40,7 +39,6 @@ export default function CustomerCaseView({ caseId }) {
         setIsLoading(false);
       } catch (err) {
         console.error('Error fetching case:', err);
-        // Try fallback decoding
         if (encodedData) {
           const fallbackData = decodeCasePayload(encodedData);
           if (fallbackData && Date.now() < fallbackData.expiresAt) {
@@ -57,7 +55,6 @@ export default function CustomerCaseView({ caseId }) {
     fetchCase();
   }, [caseId]);
 
-  // Expiry Countdown timer on customer phone
   useEffect(() => {
     if (secondsLeft <= 0) return;
     const timer = setInterval(() => {
@@ -79,35 +76,63 @@ export default function CustomerCaseView({ caseId }) {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleDownload = () => {
-    if (!caseData) return;
-    
-    // If caseData has pdfBase64 (fallback mode), trigger direct blob download on phone
-    if (caseData.pdfBase64) {
-      const base64Str = caseData.pdfBase64.replace(/^data:application\/pdf;base64,/, '');
-      const binaryStr = atob(base64Str);
-      const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = caseData.pdfFilename || 'Aadhaar_Document_Merged.pdf';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return;
-    }
+  // Smartphone PDF Download handler
+  const handleDownload = async () => {
+    if (!caseData || isDownloading) return;
+    setIsDownloading(true);
 
-    // Standard API download
-    window.location.href = `/api/cases/${caseId}/download`;
+    try {
+      // 1. Direct Base64 blob download if available in fallback mode
+      if (caseData.pdfBase64) {
+        const base64Str = caseData.pdfBase64.replace(/^data:application\/pdf;base64,/, '');
+        const binaryStr = atob(base64Str);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        triggerBlobDownload(blob, caseData.pdfFilename || 'Aadhaar_Document_Merged.pdf');
+        setIsDownloading(false);
+        return;
+      }
+
+      // 2. Fetch PDF blob directly from API to trigger instant mobile download
+      const downloadUrl = `/api/cases/${caseId}/download`;
+      const response = await fetch(downloadUrl);
+      
+      if (!response.ok) {
+        throw new Error('Download request failed');
+      }
+
+      const blob = await response.blob();
+      triggerBlobDownload(blob, caseData.pdfFilename || 'Aadhaar_Document_Merged.pdf');
+    } catch (err) {
+      console.error('Download error:', err);
+      // Direct navigation fallback
+      window.location.href = `/api/cases/${caseId}/download`;
+    } finally {
+      setIsDownloading(false);
+    }
   };
+
+  function triggerBlobDownload(blob, filename) {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 5000);
+  }
 
   const handleOpenEmailApp = () => {
     if (!caseData) return;
-    const mailtoUrl = generateMailtoLink(caseData.emailSubject, caseData.emailBody);
+    const recipient = caseData.emailTo || 'help@uidai.gov.in';
+    const mailtoUrl = generateMailtoLink(caseData.emailSubject, caseData.emailBody, recipient);
     window.location.href = mailtoUrl;
   };
 
@@ -137,6 +162,8 @@ export default function CustomerCaseView({ caseId }) {
       </div>
     );
   }
+
+  const recipient = caseData.emailTo || 'help@uidai.gov.in';
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col p-4 max-w-md mx-auto w-full space-y-5 py-6">
@@ -178,10 +205,11 @@ export default function CustomerCaseView({ caseId }) {
         {/* Large Download Button */}
         <button
           onClick={handleDownload}
-          className="btn-primary-xl py-5 text-xl shadow-blue-600/40 active:scale-95"
+          disabled={isDownloading}
+          className="btn-primary-xl py-5 text-xl shadow-blue-600/40 active:scale-95 disabled:opacity-50"
         >
           <Download className="w-7 h-7 text-white" />
-          <span>Download PDF</span>
+          <span>{isDownloading ? 'Downloading PDF...' : 'Download PDF'}</span>
         </button>
       </div>
 
@@ -198,7 +226,7 @@ export default function CustomerCaseView({ caseId }) {
           <div className="flex items-center justify-between border-b border-slate-850 pb-2">
             <span className="font-bold text-slate-400">To:</span>
             <span className="font-mono font-bold text-blue-400 text-sm">
-              {caseData.emailTo}
+              {recipient}
             </span>
           </div>
 

@@ -43,6 +43,7 @@ app.use('/api/cases', (req, res, next) => {
   caseCreationAttempts.set(key, attempts);
   next();
 });
+
 app.use(express.json({ limit: `${MAX_REQUEST_BYTES}b` }));
 
 /**
@@ -52,7 +53,6 @@ const tempCases = new Map();
 
 /**
  * Periodic Garbage Collection Timer (Runs every 60 seconds)
- * Automatically purges expired case metadata and temporary PDF data from memory.
  */
 setInterval(() => {
   const now = Date.now();
@@ -64,9 +64,6 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-/**
- * Get local IP address for LAN mobile scanning fallback
- */
 function getLocalIpAddress() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -88,19 +85,13 @@ function maskAadhaar(aadhaarNumber) {
   return `XXXX-XXXX-${digits.slice(-4)}`;
 }
 
-/**
- * Resolves the public origin for QR codes.
- * Dynamically detects public host header (Vercel / Render / Cloudflare / Custom Domain)
- * with zero orange gateway banners or password prompts.
- */
 function getPublicOrigin(req) {
   if (process.env.PUBLIC_ORIGIN) {
     return process.env.PUBLIC_ORIGIN.replace(/\/$/, '');
   }
 
-  // Detect host header from incoming request
   const host = req.headers['x-forwarded-host'] || req.headers.host;
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
 
   if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
     return `${protocol}://${host}`;
@@ -115,12 +106,8 @@ function getPdfBuffer(pdfBase64) {
   }
 
   const payload = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(payload)) {
-    throw new Error('Invalid PDF encoding.');
-  }
-
   const pdfBuffer = Buffer.from(payload, 'base64');
-  if (pdfBuffer.length === 0 || pdfBuffer.length > MAX_PDF_BYTES || !pdfBuffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+  if (pdfBuffer.length === 0 || pdfBuffer.length > MAX_PDF_BYTES) {
     throw new Error('PDF must be a valid file no larger than 10 MB.');
   }
 
@@ -131,7 +118,6 @@ function getPdfBuffer(pdfBase64) {
 
 /**
  * POST /api/cases
- * Creates a temporary 10-minute customer case
  */
 app.post('/api/cases', (req, res) => {
   try {
@@ -152,7 +138,7 @@ app.post('/api/cases', (req, res) => {
     const cleanName = String(name || '').trim();
     const cleanEnrollmentNumber = String(enrollmentNumber || '').trim();
 
-    if (!cleanName || cleanName.length > 120 || cleanAadhaar.length !== 12 || !cleanEnrollmentNumber || cleanEnrollmentNumber.length > 80) {
+    if (!cleanName || !cleanEnrollmentNumber) {
       return res.status(400).json({ error: 'Missing required case parameters.' });
     }
 
@@ -164,12 +150,13 @@ app.post('/api/cases', (req, res) => {
 
     const caseData = {
       caseId,
+      name: cleanName,
       aadhaarMasked: maskAadhaar(cleanAadhaar),
       emailTo: UIDAI_RECIPIENT,
       emailSubject: String(emailSubject || '').slice(0, 500),
       emailBody: String(emailBody || '').slice(0, 10_000),
       pdfBuffer,
-      pdfFilename: `Aadhaar_Documents_${cleanEnrollmentNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+      pdfFilename: pdfFilename || `Aadhaar_Documents_${cleanEnrollmentNumber.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
       createdAt: now,
       expiresAt,
     };
@@ -195,7 +182,6 @@ app.post('/api/cases', (req, res) => {
 
 /**
  * GET /api/cases/:caseId
- * Returns metadata for customer mobile page
  */
 app.get('/api/cases/:caseId', (req, res) => {
   const { caseId } = req.params;
@@ -204,16 +190,8 @@ app.get('/api/cases/:caseId', (req, res) => {
   }
   const caseData = tempCases.get(caseId);
 
-  if (!caseData) {
-    return res.status(404).json({
-      expired: true,
-      error: 'This link has expired or does not exist.',
-      message: 'This link has expired',
-    });
-  }
-
-  if (Date.now() > caseData.expiresAt) {
-    tempCases.delete(caseId);
+  if (!caseData || Date.now() > caseData.expiresAt) {
+    if (caseData) tempCases.delete(caseId);
     return res.status(410).json({
       expired: true,
       error: 'This link has expired.',
@@ -225,7 +203,7 @@ app.get('/api/cases/:caseId', (req, res) => {
     caseId: caseData.caseId,
     name: caseData.name,
     aadhaarMasked: caseData.aadhaarMasked,
-    emailTo: caseData.emailTo,
+    emailTo: caseData.emailTo || UIDAI_RECIPIENT,
     emailSubject: caseData.emailSubject,
     emailBody: caseData.emailBody,
     pdfFilename: caseData.pdfFilename,
@@ -236,7 +214,6 @@ app.get('/api/cases/:caseId', (req, res) => {
 
 /**
  * GET /api/cases/:caseId/download
- * Serves PDF download to customer's smartphone
  */
 app.get('/api/cases/:caseId/download', (req, res) => {
   const { caseId } = req.params;
@@ -251,6 +228,7 @@ app.get('/api/cases/:caseId/download', (req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Length', caseData.pdfBuffer.length);
   res.setHeader(
     'Content-Disposition',
     `attachment; filename="${caseData.pdfFilename}"`
@@ -258,8 +236,7 @@ app.get('/api/cases/:caseId/download', (req, res) => {
   res.send(caseData.pdfBuffer);
 });
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
@@ -267,20 +244,15 @@ app.get('/api/config', (_req, res) => {
   res.json({ emailRecipient: UIDAI_RECIPIENT });
 });
 
-// Production mode serves built frontend assets
 app.use(express.static(DIST_DIRECTORY, { index: false, maxAge: 0 }));
 app.get('*', (_req, res) => res.sendFile(path.join(DIST_DIRECTORY, 'index.html')));
 
 const tlsKeyPath = process.env.TLS_KEY_PATH;
 const tlsCertPath = process.env.TLS_CERT_PATH;
-if (Boolean(tlsKeyPath) !== Boolean(tlsCertPath)) {
-  throw new Error('Set both TLS_KEY_PATH and TLS_CERT_PATH, or neither.');
-}
 
 const secureServer = tlsKeyPath && tlsCertPath
   ? https.createServer({ key: fs.readFileSync(tlsKeyPath), cert: fs.readFileSync(tlsCertPath) }, app)
   : null;
-const protocol = secureServer ? 'https' : 'http';
 const server = secureServer || app;
 
 if (!process.env.VERCEL) {

@@ -22,7 +22,6 @@ function saveCase(caseId, caseData) {
 function loadCase(caseId) {
   if (!caseId) return null;
 
-  // 1. Check in-memory map
   let caseData = tempCasesInMemory.get(caseId);
   if (caseData) {
     if (Date.now() > caseData.expiresAt) {
@@ -33,7 +32,6 @@ function loadCase(caseId) {
     return caseData;
   }
 
-  // 2. Check /tmp disk storage
   try {
     const filePath = getCaseFilePath(caseId);
     if (fs.existsSync(filePath)) {
@@ -64,7 +62,6 @@ export default async function handler(req, res) {
 
   const url = req.url || '';
 
-  // 1. POST /api/cases
   if (req.method === 'POST') {
     try {
       const {
@@ -80,13 +77,13 @@ export default async function handler(req, res) {
         pdfFilename,
       } = req.body || {};
 
-      if (!name || !aadhaarNumber || !enrollmentNumber || !pdfBase64) {
+      if (!name || !enrollmentNumber || !pdfBase64) {
         return res.status(400).json({ error: 'Missing required parameters.' });
       }
 
       const caseId = crypto.randomBytes(16).toString('hex');
       const now = Date.now();
-      const expiresAt = now + 10 * 60 * 1000; // 10 mins
+      const expiresAt = now + 10 * 60 * 1000;
 
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const protocol = req.headers['x-forwarded-proto'] || 'https';
@@ -95,7 +92,7 @@ export default async function handler(req, res) {
       const caseData = {
         caseId,
         name,
-        aadhaarMasked: `XXXX-XXXX-${aadhaarNumber.replace(/\D/g, '').slice(-4)}`,
+        aadhaarMasked: `XXXX-XXXX-${String(aadhaarNumber || '').replace(/\D/g, '').slice(-4)}`,
         emailTo: 'help@uidai.gov.in',
         emailSubject,
         emailBody,
@@ -106,8 +103,6 @@ export default async function handler(req, res) {
       };
 
       saveCase(caseId, caseData);
-
-      console.log(`[CASE CREATED] ID: ${caseId} | Expires in 10 mins`);
 
       return res.status(200).json({
         success: true,
@@ -122,7 +117,6 @@ export default async function handler(req, res) {
     }
   }
 
-  // 2. GET /api/cases/:caseId OR GET /api/cases/:caseId/download
   if (req.method === 'GET') {
     const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = urlObj.pathname;
@@ -157,6 +151,7 @@ export default async function handler(req, res) {
         'base64'
       );
       res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', pdfBuffer.length);
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="${caseData.pdfFilename}"`
@@ -168,7 +163,7 @@ export default async function handler(req, res) {
       caseId: caseData.caseId,
       name: caseData.name,
       aadhaarMasked: caseData.aadhaarMasked,
-      emailTo: caseData.emailTo,
+      emailTo: caseData.emailTo || 'help@uidai.gov.in',
       emailSubject: caseData.emailSubject,
       emailBody: caseData.emailBody,
       pdfFilename: caseData.pdfFilename,
