@@ -101,8 +101,9 @@ function getPublicOrigin(req) {
 }
 
 function getPdfBuffer(pdfBase64) {
-  if (typeof pdfBase64 !== 'string' || pdfBase64.length === 0) {
-    throw new Error('A PDF is required.');
+  // Email-only mode: no PDF provided — return null (valid)
+  if (!pdfBase64 || (typeof pdfBase64 === 'string' && pdfBase64.length === 0)) {
+    return null;
   }
 
   const payload = pdfBase64.replace(/^data:application\/pdf;base64,/, '');
@@ -206,7 +207,8 @@ app.get('/api/cases/:caseId', (req, res) => {
     emailTo: caseData.emailTo || UIDAI_RECIPIENT,
     emailSubject: caseData.emailSubject,
     emailBody: caseData.emailBody,
-    pdfFilename: caseData.pdfFilename,
+    pdfFilename: caseData.pdfBuffer ? caseData.pdfFilename : '',
+    hasPdf: !!caseData.pdfBuffer,
     expiresAt: caseData.expiresAt,
     remainingSeconds: Math.max(0, Math.floor((caseData.expiresAt - Date.now()) / 1000)),
   });
@@ -225,6 +227,10 @@ app.get('/api/cases/:caseId/download', (req, res) => {
   if (!caseData || Date.now() > caseData.expiresAt) {
     if (caseData) tempCases.delete(caseId);
     return res.status(410).send('<h1>This download link has expired.</h1>');
+  }
+
+  if (!caseData.pdfBuffer) {
+    return res.status(404).send('<h1>No PDF available for this request. This was an email-only case.</h1>');
   }
 
   res.setHeader('Content-Type', 'application/pdf');
