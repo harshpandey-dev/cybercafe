@@ -1,7 +1,7 @@
 import React from 'react';
-import { Camera, FilePlus, ShieldCheck, Zap, Sparkles } from 'lucide-react';
+import { Camera, Mail, ShieldCheck, Zap, Sparkles } from 'lucide-react';
 
-export default function HomeScreen({ onStart, onStartNewDocument }) {
+export default function HomeScreen({ onStart, onStartNewDocument, onEmailOnly }) {
   const handleStart = onStart || onStartNewDocument;
 
   return (
@@ -21,21 +21,31 @@ export default function HomeScreen({ onStart, onStartNewDocument }) {
           <span>Fast Cyber Cafe Scanner</span>
         </div>
         <h1 className="font-heading text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-          Document PDF Assistant
+          Document Assistant
         </h1>
         <p className="text-slate-400 text-base sm:text-lg max-w-xs mx-auto leading-relaxed">
-          Click photos of your documents, crop line by line, and merge them into one PDF instantly.
+          Scan documents into PDF or generate UIDAI email directly.
         </p>
       </div>
 
-      {/* Single Large Primary Button */}
-      <div className="w-full max-w-sm pt-2">
+      {/* Two Large Buttons */}
+      <div className="w-full max-w-sm space-y-4 pt-2">
+        {/* 📷 Start New Document (PDF flow) */}
         <button
           onClick={handleStart}
           className="btn-primary-xl group py-5 text-xl tracking-wide shadow-blue-600/30 hover:shadow-blue-600/50"
         >
           <Camera className="w-7 h-7 text-white transition-transform group-hover:scale-110" />
-          <span>📷 Start New Document</span>
+          <span>📷 Scan Document + PDF</span>
+        </button>
+
+        {/* ✉️ Email Only (skip PDF) */}
+        <button
+          onClick={onEmailOnly}
+          className="btn-success-xl group py-5 text-xl tracking-wide shadow-green-600/30 hover:shadow-green-600/50"
+        >
+          <Mail className="w-7 h-7 text-white transition-transform group-hover:scale-110" />
+          <span>✉️ Email Only (No PDF)</span>
         </button>
       </div>
 

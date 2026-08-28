@@ -1,5 +1,6 @@
 /**
  * Official UIDAI Aadhaar DOB Limit Cross Email Helper
+ * RO Lucknow format
  */
 
 /**
@@ -12,33 +13,6 @@ export function formatDate(dateString) {
     return `${parts[2]}/${parts[1]}/${parts[0]}`;
   }
   return dateString;
-}
-
-/**
- * Format time string (HH:MM or HH:MM:SS) to 12-hour format with AM/PM
- */
-export function formatTime(timeString) {
-  if (!timeString) return '';
-  const parts = timeString.split(':');
-  let h = parseInt(parts[0], 10);
-  const minutes = parts[1] || '00';
-  const seconds = parts[2] || '00';
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  h = h % 12 || 12;
-  const formattedHours = h < 10 ? `0${h}` : h;
-  return `${formattedHours}:${minutes}:${seconds} ${ampm}`;
-}
-
-/**
- * Combine date (YYYY-MM-DD) and time (HH:MM:SS) to formatted string
- */
-export function formatDateTime(dateStr, timeStr) {
-  const formattedD = formatDate(dateStr);
-  const formattedT = formatTime(timeStr);
-  if (formattedD && formattedT) {
-    return `${formattedD} ${formattedT}`;
-  }
-  return formattedD || formattedT || '';
 }
 
 /**
@@ -55,30 +29,36 @@ export function formatAadhaarNumber(value) {
 
 /**
  * Constructs the 28-character Full Enrollment Number:
- * EnrollmentNo (14 digits) + YYYYMMDD (8 digits) + HHMMSS (6 digits)
+ * EnrollmentNo (14 digits) + YYYYMMDD (8 digits) + HHMMSS (6 digits) = 28 digits
+ *
+ * Example: EID = 00150333145600, Date = 2026-08-28, Time = 10:15:55
+ * Result:  00150333145600 + 20260828 + 101555 = 0015033314560020260828101555
  */
 export function computeFullEnrollmentNumber(eid, dateStr, timeStr) {
+  // Clean EID to digits only
   const cleanEid = String(eid || '').replace(/\D/g, '');
 
-  // If user already entered full 28 digits, use directly
+  // If user already entered full 28 digits, use as-is
   if (cleanEid.length === 28) {
     return cleanEid;
   }
 
+  // Date part: YYYYMMDD from YYYY-MM-DD
   let datePart = '';
   if (dateStr) {
-    datePart = dateStr.replace(/\D/g, ''); // YYYYMMDD
+    datePart = dateStr.replace(/\D/g, ''); // YYYYMMDD = 8 digits
   }
 
+  // Time part: HHMMSS from HH:MM:SS (24-hour, NO AM/PM)
   let timePart = '120000';
   if (timeStr) {
     const timeDigits = timeStr.replace(/\D/g, '');
-    if (timeDigits.length === 6) {
-      timePart = timeDigits;
-    } else if (timeDigits.length === 4) {
-      timePart = `${timeDigits}00`;
-    } else if (timeDigits.length === 2) {
-      timePart = `${timeDigits}0000`;
+    if (timeDigits.length >= 6) {
+      timePart = timeDigits.slice(0, 6); // HHMMSS
+    } else if (timeDigits.length >= 4) {
+      timePart = `${timeDigits.slice(0, 4)}00`; // HHMM + 00
+    } else if (timeDigits.length >= 2) {
+      timePart = `${timeDigits.slice(0, 2)}0000`; // HH + 0000
     }
   }
 
@@ -87,7 +67,7 @@ export function computeFullEnrollmentNumber(eid, dateStr, timeStr) {
 
 /**
  * Generate UIDAI Email Subject
- * Format: RO Lucknow DOB Limit Cross Enrolment No : [FULL ENROLLMENT NUMBER]
+ * Format: RO Lucknow DOB Limit Cross Enrolment No : [28-digit full enrollment number]
  */
 export function generateEmailSubject({ enrollmentNumber, enrollmentDate, enrollmentTime, fullEnrollmentNumber }) {
   const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
@@ -95,8 +75,10 @@ export function generateEmailSubject({ enrollmentNumber, enrollmentDate, enrollm
 }
 
 /**
- * Generate UIDAI Email Body according to exact user template.
- * Optional fields (Old DOB, Father Name, Mother Name, Mobile No.) are ONLY included if provided.
+ * Generate UIDAI Email Body.
+ * ONLY includes fields that are provided. If a field is empty/blank, that line is omitted entirely.
+ * Required fields: Name, Aadhaar No., New DOB, Enrollment URN
+ * Optional fields: Old DOB, Father Name, Mother Name, Mobile No.
  */
 export function generateEmailBody({
   name,
@@ -111,20 +93,20 @@ export function generateEmailBody({
   enrollmentTime,
   fullEnrollmentNumber,
 }) {
-  const formattedOldDob = formatDate(oldDob);
-  const formattedNewDob = formatDate(newDob);
   const formattedAadhaar = formatAadhaarNumber(aadhaarNumber);
   const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
 
-  let detailsLines = [];
+  // Build details block — only include lines for fields that have values
+  const detailsLines = [];
+
   detailsLines.push(`Name              : ${name}`);
   detailsLines.push(`Aadhaar No.       : ${formattedAadhaar}`);
 
-  if (formattedOldDob && formattedOldDob.trim()) {
-    detailsLines.push(`Old DOB           : ${formattedOldDob}`);
+  if (oldDob && oldDob.trim()) {
+    detailsLines.push(`Old DOB           : ${formatDate(oldDob)}`);
   }
 
-  detailsLines.push(`New DOB           : ${formattedNewDob}`);
+  detailsLines.push(`New DOB           : ${formatDate(newDob)}`);
 
   if (fatherName && fatherName.trim()) {
     detailsLines.push(`Father Name       : ${fatherName.trim()}`);
@@ -166,26 +148,9 @@ ${name}`;
  * Generate Encoded Mailto URI for mobile mail app trigger
  * Format: mailto:help@uidai.gov.in?subject=...&body=...
  */
-export function generateMailtoLink(param1, param2, param3) {
-  let recipient = 'help@uidai.gov.in';
-  let subject = '';
-  let body = '';
-
-  if (typeof param1 === 'string' && param1.includes('@')) {
-    recipient = param1;
-    subject = param2 || '';
-    body = param3 || '';
-  } else if (typeof param3 === 'string' && param3.includes('@')) {
-    recipient = param3;
-    subject = param1 || '';
-    body = param2 || '';
-  } else {
-    subject = param1 || '';
-    body = param2 || '';
-  }
-
-  const encodedSubject = encodeURIComponent(subject);
-  const encodedBody = encodeURIComponent(body);
-
-  return `mailto:${encodeURIComponent(recipient)}?subject=${encodedSubject}&body=${encodedBody}`;
+export function generateMailtoLink(recipient, subject, body) {
+  const to = (recipient && recipient.includes('@')) ? recipient : 'help@uidai.gov.in';
+  const encodedSubject = encodeURIComponent(subject || '');
+  const encodedBody = encodeURIComponent(body || '');
+  return `mailto:${encodeURIComponent(to)}?subject=${encodedSubject}&body=${encodedBody}`;
 }

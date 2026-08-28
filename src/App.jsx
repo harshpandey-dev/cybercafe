@@ -32,6 +32,7 @@ export default function App() {
   const [createdCaseData, setCreatedCaseData] = useState(null);
   const [isCreatingCase, setIsCreatingCase] = useState(false);
   const [emailRecipient, setEmailRecipient] = useState('help@uidai.gov.in');
+  const [isEmailOnlyMode, setIsEmailOnlyMode] = useState(false);
 
   useEffect(() => {
     async function fetchConfig() {
@@ -50,13 +51,26 @@ export default function App() {
     fetchConfig();
   }, []);
 
+  // PDF flow: Start New Document
   const handleStartNewDocument = () => {
     setPages([]);
     setActivePageIndex(null);
     setGeneratedPdf(null);
     setAadhaarDetails(null);
     setCreatedCaseData(null);
+    setIsEmailOnlyMode(false);
     setIsAddModalOpen(true);
+  };
+
+  // Email-only flow: Skip PDF, go directly to Aadhaar details
+  const handleEmailOnly = () => {
+    setPages([]);
+    setActivePageIndex(null);
+    setGeneratedPdf(null);
+    setAadhaarDetails(null);
+    setCreatedCaseData(null);
+    setIsEmailOnlyMode(true);
+    setCurrentStep('AADHAAR_DETAILS');
   };
 
   const handleAddImage = async (imageSrc) => {
@@ -147,13 +161,20 @@ export default function App() {
   };
 
   const handleCreateCustomerCase = async ({ subject, body }) => {
-    if (!generatedPdf?.pdfBase64 || !aadhaarDetails) {
-      alert('Missing document or Aadhaar details.');
+    if (!aadhaarDetails) {
+      alert('Missing Aadhaar details.');
       return;
     }
 
+    // For email-only mode, PDF fields are empty/null
+    const hasPdf = !!generatedPdf?.pdfBase64;
+
     try {
       setIsCreatingCase(true);
+      const pdfFilename = hasPdf
+        ? `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+        : '';
+
       const response = await fetch('/api/cases', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -166,8 +187,8 @@ export default function App() {
           enrollmentDateTime: `${aadhaarDetails.enrollmentDate} ${aadhaarDetails.enrollmentTime}`,
           emailSubject: subject,
           emailBody: body,
-          pdfBase64: generatedPdf.pdfBase64,
-          pdfFilename: `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          pdfBase64: hasPdf ? generatedPdf.pdfBase64 : '',
+          pdfFilename: pdfFilename,
         }),
       });
 
@@ -185,8 +206,8 @@ export default function App() {
           emailTo: emailRecipient || 'help@uidai.gov.in',
           emailSubject: subject,
           emailBody: body,
-          pdfBase64: generatedPdf.pdfBase64,
-          pdfFilename: `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+          pdfBase64: hasPdf ? generatedPdf.pdfBase64 : '',
+          pdfFilename: pdfFilename,
           expiresAt: caseResult.expiresAt,
         },
         aadhaarMasked: `XXXX-XXXX-${aadhaarDetails.aadhaarNumber.slice(-4)}`,
@@ -207,6 +228,7 @@ export default function App() {
     setGeneratedPdf(null);
     setAadhaarDetails(null);
     setCreatedCaseData(null);
+    setIsEmailOnlyMode(false);
     setCurrentStep('HOME');
     if (window.location.pathname.startsWith('/case/')) {
       window.history.pushState({}, '', '/');
@@ -229,7 +251,11 @@ export default function App() {
         setCurrentStep('PAGE_LIST');
         break;
       case 'AADHAAR_DETAILS':
-        setCurrentStep('PDF_READY');
+        if (isEmailOnlyMode) {
+          setCurrentStep('HOME');
+        } else {
+          setCurrentStep('PDF_READY');
+        }
         break;
       case 'REVIEW_EMAIL':
         setCurrentStep('AADHAAR_DETAILS');
@@ -247,6 +273,8 @@ export default function App() {
     const raw = window.location.pathname.replace(/^\/case\//, '');
     return raw.split('/')[0].split('?')[0].trim();
   };
+
+  const hasPdf = !!generatedPdf?.pdfBase64;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col antialiased select-none">
@@ -268,6 +296,7 @@ export default function App() {
           <HomeScreen
             onStart={handleStartNewDocument}
             onStartNewDocument={handleStartNewDocument}
+            onEmailOnly={handleEmailOnly}
           />
         )}
 
@@ -322,7 +351,13 @@ export default function App() {
         {currentStep === 'AADHAAR_DETAILS' && (
           <AadhaarDetailsScreen
             initialDetails={aadhaarDetails}
-            onBack={() => setCurrentStep('PDF_READY')}
+            onBack={() => {
+              if (isEmailOnlyMode) {
+                setCurrentStep('HOME');
+              } else {
+                setCurrentStep('PDF_READY');
+              }
+            }}
             onNext={handleSaveAadhaarDetails}
             onSubmitDetails={handleSaveAadhaarDetails}
           />
@@ -331,8 +366,9 @@ export default function App() {
         {currentStep === 'REVIEW_EMAIL' && aadhaarDetails && (
           <ReviewEmailScreen
             aadhaarDetails={aadhaarDetails}
-            pdfFilename={generatedPdf?.pdfBlob ? `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf` : ''}
+            pdfFilename={hasPdf ? `Aadhaar_Documents_${aadhaarDetails.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf` : ''}
             emailRecipient={emailRecipient}
+            hasPdf={hasPdf}
             onEditDetails={() => setCurrentStep('AADHAAR_DETAILS')}
             onCreateQr={handleCreateCustomerCase}
             isCreatingCase={isCreatingCase}

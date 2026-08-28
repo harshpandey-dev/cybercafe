@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, FileText, ArrowLeft, QrCode, CheckCircle2, Shield } from 'lucide-react';
+import { Mail, FileText, ArrowLeft, QrCode, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
 import { generateEmailSubject, generateEmailBody } from '../utils/uidaiEmail';
 
 export default function ReviewEmailScreen({
@@ -9,9 +9,12 @@ export default function ReviewEmailScreen({
   onEditDetails,
   onCreateQr,
   isCreatingCase,
+  hasPdf,
 }) {
   const subject = generateEmailSubject(aadhaarDetails);
   const body = generateEmailBody(aadhaarDetails);
+
+  const showPdfAttachment = hasPdf && pdfFilename;
 
   return (
     <div className="flex-1 flex flex-col p-4 max-w-xl mx-auto w-full space-y-6">
@@ -52,7 +55,7 @@ export default function ReviewEmailScreen({
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
             Subject
           </span>
-          <p className="text-sm sm:text-base font-bold text-white leading-snug">
+          <p className="text-sm sm:text-base font-bold text-white leading-snug break-all">
             {subject}
           </p>
         </div>
@@ -67,20 +70,36 @@ export default function ReviewEmailScreen({
           </div>
         </div>
 
-        {/* Attachment badge */}
-        <div className="bg-slate-900/60 border border-slate-750 rounded-xl p-3 flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
-            <FileText className="w-5 h-5" />
+        {/* Attachment badge — only when PDF exists */}
+        {showPdfAttachment ? (
+          <div className="bg-slate-900/60 border border-slate-750 rounded-xl p-3 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-blue-500/10 text-blue-400">
+              <FileText className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase">
+                Attached Document PDF
+              </span>
+              <p className="text-xs font-bold text-white truncate">
+                📎 {pdfFilename}
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">
-              Attached Document PDF
-            </span>
-            <p className="text-xs font-bold text-white truncate">
-              📎 {pdfFilename || 'Aadhaar_Document_Merged.pdf'}
-            </p>
+        ) : (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <span className="text-[11px] font-semibold text-amber-400 uppercase">
+                No PDF Attached
+              </span>
+              <p className="text-xs font-bold text-slate-300">
+                Email only mode — customer will send email without document attachment.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Buttons */}

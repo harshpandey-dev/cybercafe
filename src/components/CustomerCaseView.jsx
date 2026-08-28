@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Download, Mail, ShieldCheck, FileText, AlertTriangle, Clock } from 'lucide-react';
+import { Download, Mail, ShieldCheck, FileText, AlertTriangle, Clock, FileX } from 'lucide-react';
 import { generateMailtoLink } from '../utils/uidaiEmail';
 import { decodeCasePayload } from '../utils/caseEncoder';
 
@@ -75,6 +75,9 @@ export default function CustomerCaseView({ caseId }) {
     const s = totalSecs % 60;
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Check if this case has a PDF available
+  const hasPdf = !!(caseData && (caseData.pdfBase64 || caseData.pdfFilename));
 
   // Smartphone PDF Download handler
   const handleDownload = async () => {
@@ -179,38 +182,56 @@ export default function CustomerCaseView({ caseId }) {
         </div>
       </div>
 
-      {/* SECTION 1: YOUR DOCUMENTS ARE READY */}
+      {/* SECTION 1: DOCUMENT PDF (or "Not Available") */}
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 space-y-4 shadow-xl">
         <div className="flex items-center gap-2 text-blue-400 border-b border-slate-800 pb-3">
           <FileText className="w-6 h-6" />
           <h3 className="font-heading font-extrabold text-lg text-white">
-            YOUR DOCUMENTS ARE READY
+            {hasPdf ? 'YOUR DOCUMENTS ARE READY' : 'DOCUMENT PDF'}
           </h3>
         </div>
 
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400">
-            <FileText className="w-6 h-6" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <span className="text-[11px] font-semibold text-slate-400 uppercase">
-              Single Merged PDF
-            </span>
-            <p className="text-sm font-bold text-white truncate">
-              📄 {caseData.pdfFilename}
-            </p>
-          </div>
-        </div>
+        {hasPdf ? (
+          <>
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-400">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase">
+                  Single Merged PDF
+                </span>
+                <p className="text-sm font-bold text-white truncate">
+                  📄 {caseData.pdfFilename}
+                </p>
+              </div>
+            </div>
 
-        {/* Large Download Button */}
-        <button
-          onClick={handleDownload}
-          disabled={isDownloading}
-          className="btn-primary-xl py-5 text-xl shadow-blue-600/40 active:scale-95 disabled:opacity-50"
-        >
-          <Download className="w-7 h-7 text-white" />
-          <span>{isDownloading ? 'Downloading PDF...' : 'Download PDF'}</span>
-        </button>
+            {/* Large Download Button */}
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading}
+              className="btn-primary-xl py-5 text-xl shadow-blue-600/40 active:scale-95 disabled:opacity-50"
+            >
+              <Download className="w-7 h-7 text-white" />
+              <span>{isDownloading ? 'Downloading PDF...' : 'Download PDF'}</span>
+            </button>
+          </>
+        ) : (
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400">
+              <FileX className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-amber-300">
+                PDF Not Available
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                This request was created without a document PDF. Please send the email below directly.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SECTION 2: YOUR EMAIL IS READY */}
@@ -232,7 +253,7 @@ export default function CustomerCaseView({ caseId }) {
 
           <div className="space-y-1 pt-1">
             <span className="font-bold text-slate-400">Subject:</span>
-            <p className="font-bold text-white text-xs leading-tight">
+            <p className="font-bold text-white text-xs leading-tight break-all">
               {caseData.emailSubject}
             </p>
           </div>
@@ -248,26 +269,28 @@ export default function CustomerCaseView({ caseId }) {
         </button>
       </div>
 
-      {/* SECTION 3: 4-STEP EASY INSTRUCTIONS CARD */}
+      {/* SECTION 3: INSTRUCTIONS */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-5 space-y-3">
         <h4 className="font-heading font-extrabold text-sm text-amber-400 uppercase tracking-wider">
           📌 Final Steps to Send Email:
         </h4>
 
         <div className="space-y-2.5 text-xs text-slate-200">
-          <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs">
-              1
-            </span>
-            <div>
-              <p className="font-bold text-white">Download the PDF</p>
-              <p className="text-slate-400 text-[11px]">Tap the blue "Download PDF" button above.</p>
+          {hasPdf && (
+            <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs">
+                1
+              </span>
+              <div>
+                <p className="font-bold text-white">Download the PDF</p>
+                <p className="text-slate-400 text-[11px]">Tap the blue "Download PDF" button above.</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs">
-              2
+              {hasPdf ? '2' : '1'}
             </span>
             <div>
               <p className="font-bold text-white">Open your Email App</p>
@@ -275,19 +298,21 @@ export default function CustomerCaseView({ caseId }) {
             </div>
           </div>
 
-          <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
-            <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs">
-              3
-            </span>
-            <div>
-              <p className="font-bold text-white">Attach the downloaded PDF</p>
-              <p className="text-slate-400 text-[11px]">Tap paperclip icon in Gmail & select the downloaded PDF.</p>
+          {hasPdf && (
+            <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
+              <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center flex-shrink-0 text-xs">
+                3
+              </span>
+              <div>
+                <p className="font-bold text-white">Attach the downloaded PDF</p>
+                <p className="text-slate-400 text-[11px]">Tap paperclip icon in Gmail & select the downloaded PDF.</p>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex items-start gap-3 bg-slate-950 p-3 rounded-xl border border-slate-800">
             <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[10px]">
-              4
+              {hasPdf ? '4' : '2'}
             </span>
             <div>
               <p className="font-bold text-white">Send the email</p>
