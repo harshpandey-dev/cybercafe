@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { User, CreditCard, Calendar, Clock, Hash, ArrowRight, ArrowLeft, AlertCircle } from 'lucide-react';
-import { formatAadhaarNumber } from '../utils/uidaiEmail';
+import { User, CreditCard, Calendar, Clock, Hash, Phone, Users, ArrowRight, ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
+import { formatAadhaarNumber, computeFullEnrollmentNumber } from '../utils/uidaiEmail';
 
 export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, onNext, onBack }) {
   const [formData, setFormData] = useState(
@@ -9,9 +9,12 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
       aadhaarNumber: '',
       oldDob: '',
       newDob: '',
+      fatherName: '',
+      motherName: '',
+      mobileNumber: '',
       enrollmentNumber: '',
       enrollmentDate: new Date().toISOString().slice(0, 10),
-      enrollmentTime: '12:00',
+      enrollmentTime: '12:00:00',
     }
   );
 
@@ -37,8 +40,7 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
     if (!cleanAadhaar || cleanAadhaar.length !== 12) {
       newErrors.aadhaarNumber = 'Valid 12-digit Aadhaar number required';
     }
-    if (!formData.oldDob) newErrors.oldDob = 'Old DOB in Aadhaar is required';
-    if (!formData.newDob) newErrors.newDob = 'New Correct DOB is required';
+    if (!formData.newDob) newErrors.newDob = 'Correct New DOB is required';
     if (!formData.enrollmentNumber.trim()) newErrors.enrollmentNumber = 'Enrollment Number required';
     if (!formData.enrollmentDate) newErrors.enrollmentDate = 'Enrollment Date required';
     if (!formData.enrollmentTime) newErrors.enrollmentTime = 'Enrollment Time required';
@@ -48,11 +50,28 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
       return;
     }
 
+    const fullEnrollmentNumber = computeFullEnrollmentNumber(
+      formData.enrollmentNumber,
+      formData.enrollmentDate,
+      formData.enrollmentTime
+    );
+
+    const updatedFormData = {
+      ...formData,
+      fullEnrollmentNumber,
+    };
+
     const handleProceed = onSubmitDetails || onNext;
     if (handleProceed) {
-      handleProceed(formData);
+      handleProceed(updatedFormData);
     }
   };
+
+  const fullEIDPreview = computeFullEnrollmentNumber(
+    formData.enrollmentNumber,
+    formData.enrollmentDate,
+    formData.enrollmentTime
+  );
 
   return (
     <div className="flex-1 flex flex-col p-4 max-w-xl mx-auto w-full space-y-6">
@@ -62,7 +81,7 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           Aadhaar Update Details
         </h2>
         <p className="text-slate-400 text-sm">
-          Enter customer details below with minimal typing.
+          Enter customer details below. Optional fields can be left blank.
         </p>
       </div>
 
@@ -110,46 +129,11 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           )}
         </div>
 
-        {/* 3 & 4. Old DOB & New DOB */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-red-400" />
-              <span>3. DOB in Aadhaar *</span>
-            </label>
-            <input
-              type="date"
-              value={formData.oldDob}
-              onChange={(e) => handleChange('oldDob', e.target.value)}
-              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800 border-2 border-slate-700 text-white focus:border-blue-500 focus:outline-none transition-all"
-            />
-            {errors.oldDob && (
-              <span className="text-xs font-bold text-red-400">{errors.oldDob}</span>
-            )}
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-green-400" />
-              <span>4. Correct New DOB *</span>
-            </label>
-            <input
-              type="date"
-              value={formData.newDob}
-              onChange={(e) => handleChange('newDob', e.target.value)}
-              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800 border-2 border-slate-700 text-white focus:border-blue-500 focus:outline-none transition-all"
-            />
-            {errors.newDob && (
-              <span className="text-xs font-bold text-red-400">{errors.newDob}</span>
-            )}
-          </div>
-        </div>
-
-        {/* 5. Enrollment Number */}
+        {/* 3. Enrollment Number EID */}
         <div className="space-y-1">
           <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
             <Hash className="w-4 h-4 text-blue-400" />
-            <span>5. Enrollment Number (EID) *</span>
+            <span>3. Enrollment Number (EID) *</span>
           </label>
           <input
             type="text"
@@ -163,12 +147,12 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           )}
         </div>
 
-        {/* 6 & 7. Enrollment Date & Time */}
+        {/* 4 & 5. Enrollment Date & Time (with seconds) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
               <Calendar className="w-4 h-4 text-blue-400" />
-              <span>6. Enrollment Date *</span>
+              <span>4. Enrollment Date *</span>
             </label>
             <input
               type="date"
@@ -184,10 +168,11 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           <div className="space-y-1">
             <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
               <Clock className="w-4 h-4 text-blue-400" />
-              <span>7. Enrollment Time *</span>
+              <span>5. Enrollment Time (with sec) *</span>
             </label>
             <input
               type="time"
+              step="1"
               value={formData.enrollmentTime}
               onChange={(e) => handleChange('enrollmentTime', e.target.value)}
               className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800 border-2 border-slate-700 text-white focus:border-blue-500 focus:outline-none transition-all"
@@ -196,6 +181,97 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
               <span className="text-xs font-bold text-red-400">{errors.enrollmentTime}</span>
             )}
           </div>
+        </div>
+
+        {/* Computed Full Enrollment Number Preview Badge */}
+        {fullEIDPreview && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-left space-y-1">
+            <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5" />
+              Full Enrollment URN (Auto-Generated):
+            </span>
+            <p className="text-sm font-mono font-extrabold text-white tracking-wider break-all">
+              {fullEIDPreview}
+            </p>
+          </div>
+        )}
+
+        {/* 6 & 7. New DOB & Old DOB (Optional) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-green-400" />
+              <span>6. Correct New DOB *</span>
+            </label>
+            <input
+              type="date"
+              value={formData.newDob}
+              onChange={(e) => handleChange('newDob', e.target.value)}
+              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800 border-2 border-slate-700 text-white focus:border-blue-500 focus:outline-none transition-all"
+            />
+            {errors.newDob && (
+              <span className="text-xs font-bold text-red-400">{errors.newDob}</span>
+            )}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-bold text-slate-400 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-slate-500" />
+              <span>7. Old DOB (Optional)</span>
+            </label>
+            <input
+              type="date"
+              value={formData.oldDob}
+              onChange={(e) => handleChange('oldDob', e.target.value)}
+              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800/60 border-2 border-slate-750 text-white focus:border-blue-500 focus:outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* 8 & 9. Father Name (Optional) & Mother Name (Optional) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-bold text-slate-400 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-slate-500" />
+              <span>Father Name (Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.fatherName}
+              onChange={(e) => handleChange('fatherName', e.target.value)}
+              placeholder="e.g. Suresh Kumar"
+              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800/60 border-2 border-slate-750 text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-sm font-bold text-slate-400 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-slate-500" />
+              <span>Mother Name (Optional)</span>
+            </label>
+            <input
+              type="text"
+              value={formData.motherName}
+              onChange={(e) => handleChange('motherName', e.target.value)}
+              placeholder="e.g. Sunita Devi"
+              className="w-full px-4 py-3.5 text-base font-semibold rounded-2xl bg-slate-800/60 border-2 border-slate-750 text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* 10. Mobile Number (Optional) */}
+        <div className="space-y-1">
+          <label className="text-sm font-bold text-slate-400 flex items-center gap-1.5">
+            <Phone className="w-4 h-4 text-slate-500" />
+            <span>Mobile Number (Optional)</span>
+          </label>
+          <input
+            type="tel"
+            value={formData.mobileNumber}
+            onChange={(e) => handleChange('mobileNumber', e.target.value)}
+            placeholder="e.g. 9876543210"
+            className="w-full px-4 py-3.5 text-base font-mono font-semibold rounded-2xl bg-slate-800/60 border-2 border-slate-750 text-white placeholder-slate-600 focus:border-blue-500 focus:outline-none transition-all"
+          />
         </div>
 
         {/* Bottom Action Buttons */}
