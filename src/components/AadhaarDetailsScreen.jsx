@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, CreditCard, Calendar, Clock, Hash, Phone, Users, ArrowRight, ArrowLeft, AlertCircle, Sparkles } from 'lucide-react';
+import { User, CreditCard, Calendar, Clock, Hash, Phone, Users, ArrowRight, ArrowLeft, AlertCircle, Sparkles, RefreshCw } from 'lucide-react';
 import { formatAadhaarNumber, computeFullEnrollmentNumber } from '../utils/uidaiEmail';
 
 export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, onNext, onBack }) {
@@ -31,8 +31,11 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: null }));
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  /**
+   * Validate and submit with the chosen email type
+   * emailType: 'dob_limit_cross' | 'reactivation'
+   */
+  const handleSubmitWithType = (emailType) => {
     const newErrors = {};
 
     // Required: Name
@@ -44,10 +47,10 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
       newErrors.aadhaarNumber = 'Valid 12-digit Aadhaar number required';
     }
 
-    // Required: Enrollment Number (14 digits)
-    const cleanEid = formData.enrollmentNumber.replace(/\D/g, '');
+    // Required: Enrollment Number (14 characters — digits or letters allowed)
+    const cleanEid = formData.enrollmentNumber.replace(/[^a-zA-Z0-9]/g, '');
     if (!cleanEid || cleanEid.length !== 14) {
-      newErrors.enrollmentNumber = 'Enrollment Number must be exactly 14 digits';
+      newErrors.enrollmentNumber = 'Enrollment Number must be exactly 14 characters';
     }
 
     // Required: Enrollment Date
@@ -56,15 +59,17 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
     // Required: Enrollment Time (with seconds)
     if (!formData.enrollmentTime) newErrors.enrollmentTime = 'Enrollment Time required';
 
-    // Required: New DOB
-    if (!formData.newDob) newErrors.newDob = 'Correct New DOB is required';
+    // Required for DOB Limit Cross: New DOB
+    if (emailType === 'dob_limit_cross' && !formData.newDob) {
+      newErrors.newDob = 'Correct New DOB is required for DOB Limit Cross';
+    }
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
 
-    // Compute full 28-digit enrollment number
+    // Compute full enrollment number
     const fullEnrollmentNumber = computeFullEnrollmentNumber(
       formData.enrollmentNumber,
       formData.enrollmentDate,
@@ -74,6 +79,7 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
     const updatedFormData = {
       ...formData,
       fullEnrollmentNumber,
+      emailType, // pass which email template to use
     };
 
     const handleProceed = onSubmitDetails || onNext;
@@ -83,7 +89,7 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
   };
 
   // Live preview of full enrollment number
-  const cleanEidPreview = formData.enrollmentNumber.replace(/\D/g, '');
+  const cleanEidPreview = formData.enrollmentNumber.replace(/[^a-zA-Z0-9]/g, '');
   const fullEIDPreview = cleanEidPreview.length === 14
     ? computeFullEnrollmentNumber(formData.enrollmentNumber, formData.enrollmentDate, formData.enrollmentTime)
     : '';
@@ -93,14 +99,14 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
       {/* Title */}
       <div className="space-y-1 text-center">
         <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-white">
-          Aadhaar Update Details
+          Aadhaar Details
         </h2>
         <p className="text-slate-400 text-sm">
           Fields marked * are required. Optional fields appear in email only when filled.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
         {/* 1. Name * */}
         <div className="space-y-1">
           <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
@@ -144,15 +150,14 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           )}
         </div>
 
-        {/* 3. Enrollment Number (14 digits) * */}
+        {/* 3. Enrollment Number (14 characters — digits + letters allowed) * */}
         <div className="space-y-1">
           <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
             <Hash className="w-4 h-4 text-blue-400" />
-            <span>3. Enrollment Number (14 Digits) *</span>
+            <span>3. Enrollment Number (14 Characters) *</span>
           </label>
           <input
             type="text"
-            inputMode="numeric"
             value={formData.enrollmentNumber}
             onChange={(e) => handleChange('enrollmentNumber', e.target.value)}
             placeholder="e.g. 00150333145600"
@@ -160,7 +165,7 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
             className="w-full px-4 py-3.5 text-lg font-mono font-bold rounded-2xl bg-slate-800 border-2 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none transition-all"
           />
           <span className="text-[11px] text-slate-500">
-            {cleanEidPreview.length}/14 digits entered
+            {cleanEidPreview.length}/14 characters entered (digits & letters allowed)
           </span>
           {errors.enrollmentNumber && (
             <span className="text-xs font-bold text-red-400 flex items-center gap-1">
@@ -206,12 +211,12 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           </div>
         </div>
 
-        {/* Full Enrollment URN Preview (28 digits) */}
+        {/* Full Enrollment URN Preview */}
         {fullEIDPreview && (
           <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 text-left space-y-1">
             <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5" />
-              Full Enrollment URN (28 digits, auto-generated):
+              Full Enrollment URN (auto-generated):
             </span>
             <p className="text-sm font-mono font-extrabold text-white tracking-wider break-all">
               {fullEIDPreview}
@@ -222,11 +227,11 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           </div>
         )}
 
-        {/* 6. New DOB * */}
+        {/* 6. New DOB (Required for DOB Limit Cross, not for Reactivation) */}
         <div className="space-y-1">
           <label className="text-sm font-bold text-slate-200 flex items-center gap-1.5">
             <Calendar className="w-4 h-4 text-green-400" />
-            <span>6. Correct New DOB *</span>
+            <span>6. Correct New DOB (Required for DOB Limit Cross)</span>
           </label>
           <input
             type="date"
@@ -307,14 +312,33 @@ export default function AadhaarDetailsScreen({ initialDetails, onSubmitDetails, 
           />
         </div>
 
-        {/* Bottom Action Buttons */}
+        {/* TWO EMAIL TYPE BUTTONS */}
         <div className="pt-4 space-y-3">
+          {/* Email Type Separator */}
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-slate-600" />
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Choose Email Type</span>
+            <div className="flex-1 h-px bg-slate-600" />
+          </div>
+
+          {/* DOB Limit Cross Button */}
           <button
-            type="submit"
-            className="btn-primary-xl py-5 text-xl shadow-blue-600/30 active:scale-95"
+            type="button"
+            onClick={() => handleSubmitWithType('dob_limit_cross')}
+            className="btn-primary-xl py-5 text-lg shadow-blue-600/30 active:scale-95"
           >
-            <span>Generate Email →</span>
-            <ArrowRight className="w-6 h-6 text-white" />
+            <Calendar className="w-6 h-6 text-white" />
+            <span>📧 Generate Email — DOB Limit Cross</span>
+          </button>
+
+          {/* Aadhaar Reactivation Button */}
+          <button
+            type="button"
+            onClick={() => handleSubmitWithType('reactivation')}
+            className="btn-success-xl py-5 text-lg shadow-green-600/30 active:scale-95"
+          >
+            <RefreshCw className="w-6 h-6 text-white" />
+            <span>📧 Generate Email — Aadhaar Reactivation</span>
           </button>
 
           {onBack && (

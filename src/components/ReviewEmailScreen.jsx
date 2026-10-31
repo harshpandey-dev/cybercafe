@@ -11,8 +11,11 @@ export default function ReviewEmailScreen({
   isCreatingCase,
   hasPdf,
 }) {
-  const subject = generateEmailSubject(aadhaarDetails);
-  const body = generateEmailBody(aadhaarDetails);
+  const emailType = aadhaarDetails.emailType || 'dob_limit_cross';
+  const subject = generateEmailSubject(aadhaarDetails, emailType);
+  const body = generateEmailBody(aadhaarDetails, emailType);
+
+  const emailTypeLabel = emailType === 'reactivation' ? 'Aadhaar Reactivation' : 'DOB Limit Cross';
 
   const showPdfAttachment = hasPdf && pdfFilename;
 
@@ -27,6 +30,9 @@ export default function ReviewEmailScreen({
         <h2 className="font-heading text-2xl sm:text-3xl font-extrabold text-white">
           Review UIDAI Email
         </h2>
+        <span className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-bold ${emailType === 'reactivation' ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-blue-500/10 border border-blue-500/20 text-blue-400'}`}>
+          {emailTypeLabel}
+        </span>
         <p className="text-slate-400 text-sm">
           Check details below before generating customer QR code.
         </p>

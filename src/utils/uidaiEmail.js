@@ -1,5 +1,6 @@
 /**
- * Official UIDAI Aadhaar DOB Limit Cross Email Helper
+ * Official UIDAI Email Helper
+ * Supports: DOB Limit Cross & Aadhaar Reactivation
  * RO Lucknow format
  */
 
@@ -28,18 +29,18 @@ export function formatAadhaarNumber(value) {
 }
 
 /**
- * Constructs the 28-character Full Enrollment Number:
- * EnrollmentNo (14 digits) + YYYYMMDD (8 digits) + HHMMSS (6 digits) = 28 digits
+ * Constructs the Full Enrollment Number:
+ * EnrollmentNo (14 chars, may contain letters) + YYYYMMDD (8 digits) + HHMMSS (6 digits)
  *
  * Example: EID = 00150333145600, Date = 2026-08-28, Time = 10:15:55
  * Result:  00150333145600 + 20260828 + 101555 = 0015033314560020260828101555
  */
 export function computeFullEnrollmentNumber(eid, dateStr, timeStr) {
-  // Clean EID to digits only
-  const cleanEid = String(eid || '').replace(/\D/g, '');
+  // Keep alphanumeric chars from EID (allows letters + digits)
+  const cleanEid = String(eid || '').replace(/[^a-zA-Z0-9]/g, '');
 
-  // If user already entered full 28 digits, use as-is
-  if (cleanEid.length === 28) {
+  // If user already entered a very long string (28+), use as-is
+  if (cleanEid.length >= 28) {
     return cleanEid;
   }
 
@@ -65,22 +66,24 @@ export function computeFullEnrollmentNumber(eid, dateStr, timeStr) {
   return `${cleanEid}${datePart}${timePart}`;
 }
 
+// ============================================================
+// DOB LIMIT CROSS EMAIL
+// ============================================================
+
 /**
- * Generate UIDAI Email Subject
- * Format: RO Lucknow DOB Limit Cross Enrolment No : [28-digit full enrollment number]
+ * Generate DOB Limit Cross Email Subject
+ * Format: RO Lucknow DOB Limit Cross Enrolment No : [full enrollment number]
  */
-export function generateEmailSubject({ enrollmentNumber, enrollmentDate, enrollmentTime, fullEnrollmentNumber }) {
+export function generateDobEmailSubject({ enrollmentNumber, enrollmentDate, enrollmentTime, fullEnrollmentNumber }) {
   const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
   return `RO Lucknow DOB Limit Cross Enrolment No : ${fullEID}`;
 }
 
 /**
- * Generate UIDAI Email Body.
+ * Generate DOB Limit Cross Email Body.
  * ONLY includes fields that are provided. If a field is empty/blank, that line is omitted entirely.
- * Required fields: Name, Aadhaar No., New DOB, Enrollment URN
- * Optional fields: Old DOB, Father Name, Mother Name, Mobile No.
  */
-export function generateEmailBody({
+export function generateDobEmailBody({
   name,
   aadhaarNumber,
   oldDob,
@@ -96,9 +99,7 @@ export function generateEmailBody({
   const formattedAadhaar = formatAadhaarNumber(aadhaarNumber);
   const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
 
-  // Build details block — only include lines for fields that have values
   const detailsLines = [];
-
   detailsLines.push(`Name              : ${name}`);
   detailsLines.push(`Aadhaar No.       : ${formattedAadhaar}`);
 
@@ -142,6 +143,99 @@ Thank you for your time and support.
 
 Regards,
 ${name}`;
+}
+
+// ============================================================
+// AADHAAR REACTIVATION EMAIL
+// ============================================================
+
+/**
+ * Generate Aadhaar Reactivation Email Subject
+ * Format: RO Lucknow Aadhaar Reactivation Enrolment No : [full enrollment number]
+ */
+export function generateReactivationEmailSubject({ enrollmentNumber, enrollmentDate, enrollmentTime, fullEnrollmentNumber }) {
+  const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
+  return `RO Lucknow Aadhaar Reactivation Enrolment No : ${fullEID}`;
+}
+
+/**
+ * Generate Aadhaar Reactivation Email Body.
+ * ONLY includes fields that are provided. If a field is empty/blank, that line is omitted entirely.
+ */
+export function generateReactivationEmailBody({
+  name,
+  aadhaarNumber,
+  fatherName,
+  motherName,
+  mobileNumber,
+  enrollmentNumber,
+  enrollmentDate,
+  enrollmentTime,
+  fullEnrollmentNumber,
+}) {
+  const formattedAadhaar = formatAadhaarNumber(aadhaarNumber);
+  const fullEID = fullEnrollmentNumber || computeFullEnrollmentNumber(enrollmentNumber, enrollmentDate, enrollmentTime);
+
+  const detailsLines = [];
+  detailsLines.push(`Name              : ${name}`);
+  detailsLines.push(`Aadhaar No.       : ${formattedAadhaar}`);
+
+  if (fatherName && fatherName.trim()) {
+    detailsLines.push(`Father Name       : ${fatherName.trim()}`);
+  }
+
+  if (motherName && motherName.trim()) {
+    detailsLines.push(`Mother Name       : ${motherName.trim()}`);
+  }
+
+  if (mobileNumber && mobileNumber.trim()) {
+    detailsLines.push(`Mobile No.        : ${mobileNumber.trim()}`);
+  }
+
+  detailsLines.push(`Enrollment URN    : ${fullEID}`);
+
+  const detailsBlock = detailsLines.join('\n');
+
+  return `Dear Sir/Madam,
+
+I am writing to request your assistance regarding the reactivation of my Aadhaar. My Aadhaar has been deactivated, and I am unable to use it for Aadhaar-related services.
+
+My Aadhaar details are as follows:
+
+${detailsBlock}
+
+I have completed the required Aadhaar reactivation process and am attaching the relevant supporting documents as a single PDF for your reference.
+
+I kindly request you to verify my details and guide me regarding the further process required for my Aadhaar reactivation.
+
+Please consider my request and provide the necessary assistance at the earliest.
+
+Thank you for your time and support.
+
+Regards,
+${name}`;
+}
+
+// ============================================================
+// UNIVERSAL HELPERS (used by both email types)
+// ============================================================
+
+/**
+ * Pick subject/body generators based on emailType
+ * emailType: 'dob_limit_cross' | 'reactivation'
+ */
+export function generateEmailSubject(details, emailType) {
+  if (emailType === 'reactivation') {
+    return generateReactivationEmailSubject(details);
+  }
+  return generateDobEmailSubject(details);
+}
+
+export function generateEmailBody(details, emailType) {
+  if (emailType === 'reactivation') {
+    return generateReactivationEmailBody(details);
+  }
+  return generateDobEmailBody(details);
 }
 
 /**
